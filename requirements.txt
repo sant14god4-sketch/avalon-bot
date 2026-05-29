@@ -1,0 +1,8 @@
+requests
+python-dotenv
+schedule
+pandas
+alpaca-trade-api
+twelvedata
+flask
+gunicorn
