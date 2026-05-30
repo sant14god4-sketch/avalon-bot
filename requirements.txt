@@ -6,4 +6,4 @@ alpaca-trade-api
 twelvedata
 flask
 gunicorn
-alpaca-trade-api
+alpaca-py
