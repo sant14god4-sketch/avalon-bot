@@ -1,4 +1,6 @@
-import os, requests, uuid
+import os
+import requests
+import uuid
 from flask import Flask, request, jsonify
 from datetime import datetime
 from dotenv import load_dotenv
@@ -10,7 +12,10 @@ TRANSAK_API_KEY = os.getenv("TRANSAK_API_KEY")
 TRANSAK_API_SECRET = os.getenv("TRANSAK_API_SECRET")
 TRANSAK_ENV = os.getenv("TRANSAK_ENV", "STAGING")
 
-API_BASE = "https://api-stg.transak.com" if TRANSAK_ENV == "STAGING" else "https://api.transak.com"
+if TRANSAK_ENV == "PRODUCTION":
+    API_BASE = "https://api.transak.com"
+else:
+    API_BASE = "https://api-stg.transak.com"
 
 def get_partner_token():
     url = f"{API_BASE}/api/v2/partner/api-keys/token"
@@ -50,4 +55,5 @@ def ping():
     return jsonify({"status": "alive", "timestamp": datetime.now().isoformat()}), 200
 
 if __name__ == "__main__":
+    # Esto solo se ejecuta localmente, Render usará gunicorn
     app.run(host='0.0.0.0', port=8080)
