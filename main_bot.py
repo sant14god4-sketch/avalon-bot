@@ -7,9 +7,7 @@ import schedule
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from alpaca.trading.client import TradingClient
-from alpaca.trading.requests import MarketOrderRequest
-from alpaca.trading.enums import OrderSide, TimeInForce
-import yfinance as yf  # <-- NUEVO
+import yfinance as yf
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -17,32 +15,22 @@ logger = logging.getLogger(__name__)
 
 class AvalonBot:
     def __init__(self):
-        # APIs
         self.alpaca = TradingClient(
             api_key=os.getenv("ALPACA_API_KEY"),
             secret_key=os.getenv("ALPACA_SECRET_KEY"),
             paper=True
         )
         self.deepseek_key = os.getenv("DEEPSEEK_API_KEY")
-        
-        # Estado
         self.capital_usd = 100000.0
         self.vix = 25.0
         self.panic_score = 0.0
         self.panic_history = []
-        self.etfs = {
-            "JETS": 0.20, "EWW": 0.10, "EWC": 0.10,
-            "KRE": 0.20, "XLE": 0.15, "HYG": 0.15, "PEJ": 0.10
-        }
-        self.fase = "VIGILIA"
-        
-        # Fechas clave
+        self.etfs = {"JETS":0.20, "EWW":0.10, "EWC":0.10, "KRE":0.20, "XLE":0.15, "HYG":0.15, "PEJ":0.10}
         self.eval_date = datetime(2026, 8, 25)
         self.force_close_date = datetime(2026, 9, 16)
-        self.expiry_date = datetime(2027, 1, 15)
+        self.fase = "VIGILIA"
 
     def get_vix(self):
-        """Obtiene VIX usando yfinance (gratuito, sin API key)"""
         try:
             vix = yf.Ticker("^VIX")
             df = vix.history(period="1d", interval="1m")
@@ -50,36 +38,28 @@ class AvalonBot:
                 self.vix = df['Close'].iloc[-1]
                 logger.info(f"VIX actual: {self.vix}")
             else:
-                logger.warning("No se obtuvo datos de VIX, usando valor por defecto")
+                logger.warning("No se obtuvo VIX, usando valor por defecto")
         except Exception as e:
-            logger.error(f"Error obteniendo VIX con yfinance: {e}")
+            logger.error(f"Error VIX: {e}")
             self.vix = 25.0
 
     def get_panic_score(self):
-        """Consulta a DeepSeek con manejo robusto"""
+        if not self.deepseek_key:
+            logger.warning("DeepSeek no configurado")
+            return
         try:
-            prompt = ("Eres analista financiero. Analiza noticias recientes de Norteamérica: "
-                      "cuarentenas, restricciones de viaje, emergencias sanitarias, pánico en redes. "
-                      "Asigna una puntuación de pánico del 0 al 1. Responde SOLO con el número.")
+            prompt = "Puntuación de pánico (0-1) en Norteamérica. Solo número."
             headers = {"Authorization": f"Bearer {self.deepseek_key}", "Content-Type": "application/json"}
-            data = {
-                "model": "deepseek-chat",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0,
-                "max_tokens": 10
-            }
+            data = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": 0, "max_tokens": 10}
             resp = requests.post("https://api.deepseek.com/v1/chat/completions", json=data, headers=headers, timeout=30)
             result = resp.json()
             if "choices" in result and len(result["choices"]) > 0:
-                content = result["choices"][0]["message"]["content"].strip()
-                score = float(content)
+                score = float(result["choices"][0]["message"]["content"].strip())
                 self.panic_score = min(max(score, 0.0), 1.0)
                 self.panic_history.append((datetime.now(), self.panic_score))
                 cutoff = datetime.now() - timedelta(days=30)
                 self.panic_history = [(d, s) for d, s in self.panic_history if d > cutoff]
                 logger.info(f"DeepSeek pánico: {self.panic_score}")
-            else:
-                logger.warning(f"Respuesta inesperada de DeepSeek: {result}")
         except Exception as e:
             logger.error(f"DeepSeek falló: {e}")
 
@@ -108,14 +88,12 @@ class AvalonBot:
             margin_pct, stop = 0.40, None
             mode = "CRISIS"
         else:
-            logger.info("VIX > 85: objetivo alcanzado, cerrando todo")
+            logger.info("VIX > 85, cerrando todo")
             self.close_all_positions()
             return
-        
         if self.panic_score > 0.7:
             margin_pct = min(0.40, margin_pct + 0.10)
             logger.info("Refuerzo +10% por pánico extremo")
-        
         exposicion = self.capital_usd * 3.0
         spy = self.get_sp500()
         if spy > 0:
@@ -145,7 +123,7 @@ class AvalonBot:
             logger.info("Renovando opciones (DeepSeek > 0.15)")
 
     def close_all_positions(self):
-        logger.info("Cerrando todas las posiciones (futuros y opciones)")
+        logger.info("Cerrando todas las posiciones")
 
     def check_closure(self):
         today = datetime.now().date()
