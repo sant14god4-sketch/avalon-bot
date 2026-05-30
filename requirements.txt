@@ -7,3 +7,4 @@ twelvedata
 flask
 gunicorn
 alpaca-py
+yfinance
